@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Critical Frontier — MSV</title>
+<style>
+  :root {
+    --msv-blue: #3B5BD5;
+    --info-blue: #2563EB;
+    --builder-dark: #4A4A6A;
+    --text-primary: #1C1C2E;
+    --text-secondary: #6B7280;
+    --radius: 8px;
+    --card-w: 142px;
+  }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+    color: var(--text-primary);
+    display: grid;
+    grid-template-rows: 1fr 170px;
+    height: 100%;
+    background: #000;
+  }
+
+  #canvas {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    background: #000;
+  }
+
+  /* Stars — three layers at different speeds for parallax */
+  #star-field {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+  @keyframes sd-slow   { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @keyframes sd-mid    { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @keyframes sd-fast   { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .sl { animation: sd-slow 40s linear infinite; }
+  .sl2{ animation: sd-slow 40s linear infinite; animation-delay: -20s; }
+  .sm { animation: sd-mid  22s linear infinite; }
+  .sm2{ animation: sd-mid  22s linear infinite; animation-delay: -11s; }
+  .sf { animation: sd-fast 12s linear infinite; }
+  .sf2{ animation: sd-fast 12s linear infinite; animation-delay: -6s; }
+
+  #known-world {
+    position: absolute;
+    width: 820px; height: 820px;
+    border-radius: 50%;
+    background: #16161F;
+    left: -590px; top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+  }
+
+  .zone-label {
+    position: absolute;
+    font-size: 9.5px; letter-spacing: 0.16em;
+    text-transform: uppercase; z-index: 15; font-weight: 500;
+  }
+  #label-known  { left:22px; top:50%; color:#fff; writing-mode:vertical-rl; transform:translateY(-50%) rotate(180deg); }
+  #label-frontier { left:248px; top:18px; color:#fff; }
+  #label-newworld { right:22px; top:50%; transform:translateY(-50%); font-size:11px; letter-spacing:0.05em; color:#fff; }
+
+  /* Connection lines SVG */
+  #connections {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 8; pointer-events: none;
+  }
+
+  /* Cards centring wrapper */
+  #cards-center { position:absolute; inset:0; display:flex; align-items:center; z-index:10; }
+  #cards-inner  { position:relative; width:100%; height:560px; }
+
+  @keyframes bob { 0%,100% { translate: 0 0; } 50% { translate: 0 -6px; } }
+  @keyframes floatIn {
+    from { opacity:0; transform:scale(0.72) translateY(18px); }
+    to   { opacity:1; transform:scale(1) translateY(0); }
+  }
+  .card {
+    position: absolute;
+    border-radius: var(--radius);
+    width: var(--card-w);
+    padding: 11px 13px;
+    cursor: pointer; z-index: 10;
+    user-select: none;
+    opacity: 0;
+    animation: floatIn 0.5s cubic-bezier(0.34,1.46,0.64,1) forwards,
+               bob var(--bob-dur, 4s) var(--bob-del, 0s) ease-in-out infinite;
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
+  .card:hover { transform: scale(1.045); }
+  .card.active { box-shadow: 0 0 0 2px var(--msv-blue); }
+  .card-role { font-size:8.5px; letter-spacing:0.13em; text-transform:uppercase; margin-bottom:4px; }
+  .card-name { font-size:12px; font-weight:600; line-height:1.35; }
+
+  .card-builder { background: var(--builder-dark); color:#fff; }
+  .card-builder .card-role { opacity:0.6; }
+  .card-steward  { background: #1E3A8A; color:#fff; }
+  .card-steward .card-role { opacity:0.7; }
+  .card-catalyst { background: var(--msv-blue); color:#fff; opacity:0.85; }
+  .card-undiscovered { background:rgba(160,155,145,0.1); color:var(--text-secondary); border:1.5px dashed rgba(200,200,200,0.3); opacity:0.6; }
+
+  .card-navigator {
+    width:196px; background:#fff;
+    border:1.5px solid var(--info-blue);
+    color:var(--text-primary);
+    cursor:default; padding:0; z-index:12;
+  }
+  .card-navigator:hover { transform:none; }
+  .nav-header { padding:12px 14px 10px; cursor:pointer; border-radius:calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0; transition:background 150ms; }
+  .nav-header:hover { background:rgba(37,99,235,0.045); }
+  .nav-header .card-role { color:var(--info-blue); opacity:1; }
+  .nav-header .card-name { font-size:15px; font-weight:700; }
+  .nav-divider { height:1px; background:rgba(37,99,235,0.13); margin:0 14px; }
+  .nav-sub { padding:9px 14px; font-size:11px; font-weight:500; color:var(--text-primary); cursor:pointer; line-height:1.4; transition:background 150ms; display:flex; align-items:center; gap:7px; }
+  .nav-sub:hover { background:rgba(37,99,235,0.05); }
+  .nav-sub:last-child { border-radius:0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px); }
+  .nav-dot { width:5px; height:5px; border-radius:50%; background:var(--info-blue); flex-shrink:0; opacity:0.6; }
+
+  #detail-panel {
+    background:#fff;
+    border-top:1px solid rgba(0,0,0,0.07);
+    display:flex; align-items:stretch;
+    overflow:hidden; min-height:0;
+  }
+  #detail-content { flex:1; padding:16px 36px; max-width:680px; border-right:1px solid rgba(0,0,0,0.055); overflow:hidden; }
+  .detail-default { font-size:13.5px; color:var(--text-secondary); line-height:1.7; margin-top:4px; }
+  .detail-role { font-size:9px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:8px; }
+  .detail-name { font-size:19px; font-weight:700; color:var(--text-primary); line-height:1.2; margin-bottom:12px; }
+  .detail-body { font-size:14px; line-height:1.78; color:#374151; margin-bottom:16px; }
+  .detail-quote { font-style:italic; font-size:14px; line-height:1.65; color:#4B5563; border-left:2.5px solid var(--msv-blue); padding-left:15px; margin:0; }
+
+  #pills-section { flex-shrink:0; padding:16px 28px; min-width:256px; overflow:hidden; }
+  .pills-label { font-size:9px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-secondary); margin-bottom:10px; font-weight:500; }
+  #pills-grid { display:flex; flex-direction:column; gap:4px; }
+  .pill { display:block; width:100%; padding:5px 12px; border-radius:20px; border:1px solid rgba(0,0,0,0.11); background:transparent; font-family:inherit; font-size:11px; color:var(--text-secondary); text-align:left; cursor:pointer; transition:all 150ms; white-space:nowrap; }
+  .pill:hover { border-color:var(--msv-blue); color:var(--msv-blue); background:rgba(59,91,213,0.04); }
+  .pill.active { border-color:var(--msv-blue); color:var(--msv-blue); background:rgba(59,91,213,0.07); }
+</style>
+</head>
+<body>
+
+<div id="canvas">
+
+  <!-- Stars: 3 parallax layers at different speeds -->
+  <svg id="star-field" xmlns="http://www.w3.org/2000/svg" style="position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;">
+    <!-- Slow layer: small dim stars, far away -->
+    <g class="sl"  id="ll1"></g>
+    <g class="sl2" id="ll2"></g>
+    <!-- Mid layer: medium stars -->
+    <g class="sm"  id="ml1"></g>
+    <g class="sm2" id="ml2"></g>
+    <!-- Fast layer: bright large stars, close -->
+    <g class="sf"  id="fl1"></g>
+    <g class="sf2" id="fl2"></g>
+  </svg>
+
+  <div id="known-world"></div>
+
+  <span class="zone-label" id="label-known">The known world</span>
+  <span class="zone-label" id="label-frontier">The critical frontier</span>
+  <span class="zone-label" id="label-newworld">New world →</span>
+
+  <!-- Connection lines -->
+  <svg id="connections" xmlns="http://www.w3.org/2000/svg"></svg>
+
+  <div id="cards-center"><div id="cards-inner">
+
+    <div class="card card-builder" style="left:210px;top:46px;animation-delay:0.1s;--bob-dur:4.2s;--bob-del:0s" data-char="builder"><div class="card-role">Builder</div><div class="card-name">Portfolio founder</div></div>
+    <div class="card card-builder" style="left:338px;top:268px;animation-delay:0.2s;--bob-dur:5.1s;--bob-del:-1.8s" data-char="builder"><div class="card-role">Builder</div><div class="card-name">Portfolio founder</div></div>
+    <div class="card card-builder" style="left:530px;top:172px;animation-delay:0.35s;--bob-dur:4.7s;--bob-del:-3.1s" data-char="builder"><div class="card-role">Builder</div><div class="card-name">Portfolio founder</div></div>
+    <div class="card card-builder" style="left:618px;top:298px;animation-delay:0.45s;--bob-dur:3.9s;--bob-del:-0.7s" data-char="builder"><div class="card-role">Builder</div><div class="card-name">Portfolio founder</div></div>
+    <div class="card card-builder" style="left:630px;top:468px;animation-delay:0.5s;--bob-dur:5.4s;--bob-del:-2.4s" data-char="builder"><div class="card-role">Builder</div><div class="card-name">Portfolio founder</div></div>
+
+    <div class="card card-steward" style="left:240px;top:354px;animation-delay:0.15s;--bob-dur:4.5s;--bob-del:-1.2s" data-char="steward"><div class="card-role">Steward</div><div class="card-name">LP</div></div>
+    <div class="card card-steward" style="left:362px;top:140px;animation-delay:0.25s;--bob-dur:5.8s;--bob-del:-4.1s" data-char="steward"><div class="card-role">Steward</div><div class="card-name">LP</div></div>
+    <div class="card card-steward" style="left:484px;top:390px;animation-delay:0.4s;--bob-dur:4.1s;--bob-del:-0.5s" data-char="steward"><div class="card-role">Steward</div><div class="card-name">LP</div></div>
+    <div class="card card-steward" style="left:692px;top:130px;animation-delay:0.55s;--bob-dur:6.2s;--bob-del:-2.9s" data-char="steward"><div class="card-role">Steward</div><div class="card-name">LP</div></div>
+
+    <div class="card card-catalyst" style="left:524px;top:38px;animation-delay:0.3s;--bob-dur:4.8s;--bob-del:-3.6s" data-char="catalyst"><div class="card-role">Catalyst</div><div class="card-name">Co-investor</div></div>
+    <div class="card card-catalyst" style="left:770px;top:418px;animation-delay:0.6s;--bob-dur:5.3s;--bob-del:-1.5s" data-char="catalyst"><div class="card-role">Catalyst</div><div class="card-name">Co-investor</div></div>
+
+    <div class="card card-navigator" style="left:820px;top:210px;animation-delay:0.75s;--bob-dur:6.5s;--bob-del:-2.2s">
+      <div class="nav-header" id="nav-main" data-char="navigator">
+        <div class="card-role" style="color:var(--info-blue)">Navigator</div>
+        <div class="card-name">MSV</div>
+      </div>
+      <div class="nav-divider"></div>
+      <div class="nav-sub" data-char="investment-team"><div class="nav-dot"></div>Leads — Investment Team</div>
+      <div class="nav-divider"></div>
+      <div class="nav-sub" data-char="ops-team"><div class="nav-dot"></div>Navigation System — Ops Team</div>
+    </div>
+
+    <svg style="position:absolute;left:1026px;top:240px;width:100px;height:88px;z-index:9;pointer-events:none;" viewBox="0 0 100 88" fill="none">
+      <g opacity="0.35" stroke="#aaa" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="0" y1="12" x2="72" y2="12"/><polyline points="60,5 72,12 60,19"/>
+        <line x1="10" y1="44" x2="84" y2="44"/><polyline points="72,37 84,44 72,51"/>
+        <line x1="0" y1="76" x2="72" y2="76"/><polyline points="60,69 72,76 60,83"/>
+      </g>
+    </svg>
+
+    <div class="card card-undiscovered" style="left:1090px;top:32px;animation-delay:0.9s;--bob-dur:4.4s;--bob-del:-1.1s"  data-char="undiscovered"><div class="card-role">Undiscovered</div><div class="card-name">Future builder</div></div>
+    <div class="card card-undiscovered" style="left:1150px;top:148px;animation-delay:0.95s;--bob-dur:5.6s;--bob-del:-3.3s" data-char="undiscovered"><div class="card-role">Undiscovered</div><div class="card-name">Future builder</div></div>
+    <div class="card card-undiscovered" style="left:1108px;top:264px;animation-delay:1.0s;--bob-dur:4.9s;--bob-del:-0.8s"  data-char="undiscovered"><div class="card-role">Undiscovered</div><div class="card-name">Future builder</div></div>
+    <div class="card card-undiscovered" style="left:1162px;top:368px;animation-delay:1.05s;--bob-dur:6.1s;--bob-del:-4.5s" data-char="undiscovered"><div class="card-role">Undiscovered</div><div class="card-name">Future builder</div></div>
+    <div class="card card-undiscovered" style="left:1095px;top:460px;animation-delay:1.1s;--bob-dur:5.2s;--bob-del:-2.0s"  data-char="undiscovered"><div class="card-role">Undiscovered</div><div class="card-name">Future builder</div></div>
+
+  </div></div>
+</div>
+
+<div id="detail-panel">
+  <div id="detail-content">
+    <p class="detail-default">Select a character or an essential system to explore the Critical Frontier.</p>
+  </div>
+  <div id="pills-section">
+    <div class="pills-label">Essential systems</div>
+    <div id="pills-grid"></div>
+  </div>
+</div>
+
+<script>
+// ── Generate stars — 3 parallax layers ─────────────────────
+(function() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const W = 1600; // tile width
+
+  function fillLayer(g1id, g2id, count, minR, maxR, minOp, maxOp) {
+    const g1 = document.getElementById(g1id);
+    const g2 = document.getElementById(g2id);
+    for (let i = 0; i < count; i++) {
+      const x  = Math.random() * W;
+      const yp = (Math.random() * 100).toFixed(2) + '%'; // % of SVG height
+      const r  = (Math.random() * (maxR - minR) + minR).toFixed(1);
+      const op = (Math.random() * (maxOp - minOp) + minOp).toFixed(2);
+      [g1, g2].forEach((g, ti) => {
+        const c = document.createElementNS(ns, 'circle');
+        c.setAttribute('cx', (x + ti * W).toFixed(1));
+        c.setAttribute('cy', yp);
+        c.setAttribute('r', r);
+        c.setAttribute('fill', '#ffffff');
+        c.setAttribute('opacity', op);
+        g.appendChild(c);
+      });
+    }
+    // g2 offset so tile is seamless: already accounted for in cx above
+    // but we also need to set viewBox on parent to 2*W wide
+  }
+
+  // Slow/far: many tiny dim stars
+  fillLayer('ll1','ll2', 500, 0.3, 0.8, 0.2, 0.45);
+  // Mid: medium stars
+  fillLayer('ml1','ml2', 300, 0.7, 1.3, 0.4, 0.65);
+  // Fast/close: fewer bright large stars
+  fillLayer('fl1','fl2', 120, 1.2, 2.2, 0.7, 1.0);
+})();
+
+// ── Draw connection lines ───────────────────────────────────
+(function() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('connections');
+  // Navigator card centre: left=820, top offset by cards-inner centering
+  // cards-inner is 560px tall, centred in canvas
+  // We calculate at runtime after layout
+  function drawLines() {
+    const inner = document.getElementById('cards-inner');
+    const navCard = inner.querySelector('.card-navigator');
+    const rect = inner.getBoundingClientRect();
+    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+    const navR = navCard.getBoundingClientRect();
+    const NAV = {
+      x: navR.left - canvasRect.left + navR.width / 2,
+      y: navR.top  - canvasRect.top  + navR.height / 2,
+    };
+    const cards = inner.querySelectorAll('.card-builder, .card-steward, .card-catalyst');
+    cards.forEach(card => {
+      const cr = card.getBoundingClientRect();
+      const cx = cr.left - canvasRect.left + cr.width / 2;
+      const cy = cr.top  - canvasRect.top  + cr.height / 2;
+      const mx = (cx + NAV.x) / 2;
+      const my = (cy + NAV.y) / 2;
+      const dx = NAV.x - cx;
+      const dy = NAV.y - cy;
+      const off = Math.random() * 80 - 40;
+      const cpx = mx - dy * 0.2 + off;
+      const cpy = my + dx * 0.2 + off;
+      const path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', `M${cx.toFixed(1)} ${cy.toFixed(1)} Q${cpx.toFixed(1)} ${cpy.toFixed(1)} ${NAV.x.toFixed(1)} ${NAV.y.toFixed(1)}`);
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', 'rgba(255,255,255,0.15)');
+      path.setAttribute('stroke-width', '0.8');
+      svg.appendChild(path);
+    });
+  }
+  // Draw after cards have animated in
+  setTimeout(drawLines, 1200);
+})();
+
+// ── Character data ──────────────────────────────────────────
+const characters = {
+  navigator: { role:'Navigator', name:'At the edge. Leading the way.', body:'MSV — investment team and ops team together — operates at the frontier edge, ahead of the builders, reading the terrain they\'re about to enter. Not behind. Not beside. Slightly further forward. The navigator has seen what\'s coming. The builder is inside it. That\'s the relationship.', quote:'We don\'t point at the frontier from a distance. We\'re already in it.' },
+  'investment-team': { role:'Navigator — Investment team', name:'Holds the map. Reads the terrain.', body:'The investment team operates at the furthest point of the frontier — where science is becoming something that can finally be built, and where the decision to back a builder has to be made before the evidence is complete. They see across systems in a way no single founder can. They hold conviction when the room is quiet.', quote:'We\'ve been looking for you.' },
+  'ops-team': { role:'Navigator — Navigation system', name:'The infrastructure of conviction.', body:'The ops team is what makes operating at the frontier edge sustainable over a long horizon. Conviction without operational discipline is just exposure. The navigation system runs quietly underneath everything — maintaining the relationships, the processes, and the infrastructure that lets the investment team stay focused on what\'s ahead.', quote:'The frontier doesn\'t run on conviction alone.' },
+  builder: { role:'Builder — Portfolio founder', name:'Inside the frontier. Building.', body:'Portfolio founders are scattered across the frontier at different depths — some closer to known territory, some further out. All of them rebuilding an essential system from the ground up. The navigator found them, recognised the weight of their work, and moved alongside them. The builder makes the frontier real.', quote:'You didn\'t choose this problem. It chose you.' },
+  steward: { role:'Steward — LP', name:'Capital that holds for the long horizon.', body:'Stewards travel with the frontier — they\'re not anchored in the known world. Their role is to provide the patient capital that makes long-horizon building possible. The right LPs understand that essential systems don\'t mature on a venture timeline. They don\'t ask them to.', quote:'Backing what endures. Investing beyond cycles.' },
+  catalyst: { role:'Catalyst — Co-investor', name:'Accelerates what\'s already in motion.', body:'Co-investors travel at the frontier too — arriving alongside builders and amplifying what\'s already moving in the right direction. They don\'t originate the conviction. They recognise it and compound it.', quote:'The best catalysts recognise the frontier before they arrive at it.' },
+  undiscovered: { role:'Undiscovered builder', name:'Beyond the current edge.', body:'The frontier is always expanding. There are builders already working on the next essential system who haven\'t been found yet. They exist beyond what\'s currently visible — further into the frontier than anyone has mapped. Part of the navigator\'s role is to keep moving toward them.', quote:'When no one claims the territory, the work stays smaller than it deserves to be.' }
+};
+
+const systems = [
+  { id:'energy',      label:'Decarbonise the planet',           body:'From grid-scale renewables to complex energy markets. Australia has pioneered systems designed for reliability, transition, and extreme conditions. Energy is the foundation everything else depends on.' },
+  { id:'food',        label:'Feed 10 billion people',           body:'Agriculture built for low rainfall, poor soils, and global export. The food system is being rebuilt for biology-led innovation, autonomy, and a climate that no longer behaves the way it used to.' },
+  { id:'space',       label:'Bridge the gap to space',          body:'Sovereign launch capability, Earth observation, communications, and space safety — tightly linked to terrestrial systems. Space isn\'t separate from the frontier. It\'s where the frontier extends next.' },
+  { id:'industrial',  label:'Supercharge industrial productivity', body:'Software tightly integrated with hardware, physics, and operations. The next generation of industrial infrastructure is being built for autonomy, resilience, and a workforce that looks completely different.' },
+  { id:'health',      label:'Reach humanity scale healthcare',  body:'Biology and health systems built not for the few, but for everyone. Closing the gap between what medicine can do and what actually reaches most people requires rebuilding the system, not improving the edges.' },
+  { id:'intelligence',label:'Enable the next intelligence leap', body:'Compute, AI, and machine perception at the point where they become genuinely useful infrastructure. Not hype cycles — the moment where intelligence becomes a reliable substrate for everything else that needs to be built.' }
+];
+
+const pillsGrid = document.getElementById('pills-grid');
+systems.forEach(sys => {
+  const btn = document.createElement('button');
+  btn.className = 'pill';
+  btn.textContent = sys.label;
+  btn.addEventListener('click', () => showSystem(sys, btn));
+  pillsGrid.appendChild(btn);
+});
+
+let activeCard = null;
+function showCharacter(data, el) {
+  clearActive();
+  if (el) { el.classList.add('active'); activeCard = el; }
+  document.getElementById('detail-content').innerHTML =
+    `<div class="detail-role">${data.role}</div>` +
+    `<div class="detail-name">${data.name}</div>` +
+    `<div class="detail-body">${data.body}</div>` +
+    (data.quote ? `<blockquote class="detail-quote">${data.quote}</blockquote>` : '');
+}
+function showSystem(sys, pillEl) {
+  clearActive();
+  pillEl.classList.add('active');
+  document.getElementById('detail-content').innerHTML =
+    `<div class="detail-role">Essential system</div>` +
+    `<div class="detail-name">${sys.label}</div>` +
+    `<div class="detail-body">${sys.body}</div>`;
+}
+function clearActive() {
+  if (activeCard) { activeCard.classList.remove('active'); activeCard = null; }
+  pillsGrid.querySelectorAll('.pill.active').forEach(p => p.classList.remove('active'));
+}
+
+document.querySelectorAll('.card[data-char]').forEach(card => {
+  card.addEventListener('click', () => {
+    const data = characters[card.dataset.char];
+    if (data) showCharacter(data, card);
+  });
+});
+document.getElementById('nav-main').addEventListener('click', () => showCharacter(characters.navigator, null));
+document.querySelectorAll('.nav-sub[data-char]').forEach(item => {
+  item.addEventListener('click', e => {
+    e.stopPropagation();
+    const data = characters[item.dataset.char];
+    if (data) showCharacter(data, null);
+  });
+});
+</script>
+</body>
+</html>

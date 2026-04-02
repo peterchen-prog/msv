@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Critical Frontier — MSV</title>
+  <style>
+    :root {
+      --msv-blue: #3B5BD5;
+      --info-blue: #2563EB;
+      --builder-dark: #4A4A6A;
+      --known-grey: #9A9A9A;
+      --canvas-bg: #F7F6F2;
+      --text-primary: #1C1C2E;
+      --text-secondary: #6B7280;
+      --radius: 8px;
+      --card-w: 142px;
+    }
+
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #EDECE8;
+      color: var(--text-primary);
+    }
+
+    /* ─── Canvas ───────────────────────────────────── */
+    #canvas {
+      position: relative;
+      width: 100%;
+      min-width: 1280px;
+      height: 640px;
+      overflow: hidden;
+      background: var(--canvas-bg);
+    }
+
+    /* Animated diagonal frontier pattern */
+    #frontier-bg {
+      position: absolute;
+      inset: 0;
+      background-image: repeating-linear-gradient(
+        -45deg,
+        transparent 0px,
+        transparent 14px,
+        rgba(0, 0, 0, 0.021) 14px,
+        rgba(0, 0, 0, 0.021) 15.5px
+      );
+      background-size: 22px 22px;
+      animation: driftLeft 28s linear infinite;
+      will-change: background-position;
+    }
+
+    @keyframes driftLeft {
+      from { background-position: 0 0; }
+      to   { background-position: -440px 0; }
+    }
+
+    /* Known world — large circle, partially off-canvas left */
+    #known-world {
+      position: absolute;
+      width: 900px;
+      height: 900px;
+      border-radius: 50%;
+      background: var(--known-grey);
+      left: -650px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 1;
+    }
+
+    /* Labels */
+    .zone-label {
+      position: absolute;
+      font-size: 9.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      z-index: 5;
+    }
+
+    #label-known {
+      left: 26px;
+      top: 50%;
+      color: rgba(255,255,255,0.42);
+      writing-mode: vertical-rl;
+      transform: translateY(-50%) rotate(180deg);
+    }
+
+    #label-frontier {
+      left: 270px;
+      top: 20px;
+      color: rgba(0,0,0,0.18);
+    }
+
+    #label-newworld {
+      right: 26px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      opacity: 0.48;
+      z-index: 5;
+    }
+
+    /* ─── Cards ─────────────────────────────────────── */
+    .card {
+      position: absolute;
+      border-radius: var(--radius);
+      width: var(--card-w);
+      padding: 12px 14px;
+      cursor: pointer;
+      z-index: 10;
+      transition: transform 150ms ease;
+      user-select: none;
+    }
+
+    .card:hover {
+      transform: scale(1.04);
+    }
+
+    .card-role {
+      font-size: 8.5px;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .card-name {
+      font-size: 12.5px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    /* Builder — dark slate */
+    .card-builder {
+      background: var(--builder-dark);
+      color: #fff;
+    }
+    .card-builder .card-role { opacity: 0.62; }
+
+    /* Steward — MSV blue */
+    .card-steward {
+      background: var(--msv-blue);
+      color: #fff;
+    }
+    .card-steward .card-role { opacity: 0.7; }
+
+    /* Catalyst — same blue, lighter opacity */
+    .card-catalyst {
+      background: var(--msv-blue);
+      color: #fff;
+      opacity: 0.76;
+    }
+
+    /* Undiscovered — dashed, muted */
+    .card-undiscovered {
+      background: rgba(170, 165, 155, 0.11);
+      color: var(--text-secondary);
+      border: 1.5px dashed rgba(110, 105, 95, 0.34);
+      opacity: 0.6;
+    }
+    .card-undiscovered .card-role { opacity: 0.7; }
+
+    /* Navigator — white, info-blue border */
+    .card-navigator {
+      width: 204px;
+      background: #fff;
+      border: 1.5px solid var(--info-blue);
+      color: var(--text-primary);
+      cursor: default;
+      padding: 0;
+      z-index: 12;
+    }
+
+    .card-navigator:hover {
+      transform: none;
+    }
+
+    .nav-header {
+      padding: 13px 15px 11px;
+      cursor: pointer;
+      border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+      transition: background 150ms ease;
+    }
+
+    .nav-header:hover {
+      background: rgba(37, 99, 235, 0.045);
+    }
+
+    .nav-header .card-role {
+      color: var(--info-blue);
+      opacity: 1;
+    }
+
+    .nav-header .card-name {
+      font-size: 14.5px;
+      font-weight: 700;
+    }
+
+    .nav-divider {
+      height: 1px;
+      background: rgba(37, 99, 235, 0.14);
+      margin: 0 15px;
+    }
+
+    .nav-sub {
+      padding: 9px 15px;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--text-primary);
+      cursor: pointer;
+      line-height: 1.4;
+      transition: background 150ms ease;
+    }
+
+    .nav-sub:hover {
+      background: rgba(37, 99, 235, 0.05);
+    }
+
+    .nav-sub:last-child {
+      border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+    }
+
+    /* ─── Navigator arrows ───────────────────────────── */
+    #nav-arrows {
+      position: absolute;
+      z-index: 9;
+      pointer-events: none;
+    }
+
+    /* ─── Detail Panel ───────────────────────────────── */
+    #detail-panel {
+      background: #fff;
+      border-top: 1px solid rgba(0,0,0,0.07);
+      display: flex;
+      align-items: stretch;
+      min-height: 210px;
+    }
+
+    #detail-content {
+      flex: 1;
+      padding: 34px 52px 38px;
+      max-width: 700px;
+      border-right: 1px solid rgba(0,0,0,0.055);
+    }
+
+    .detail-default {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .detail-role {
+      font-size: 9.5px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 9px;
+    }
+
+    .detail-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+
+    .detail-body {
+      font-size: 14.5px;
+      line-height: 1.78;
+      color: #374151;
+      margin-bottom: 18px;
+    }
+
+    .detail-quote {
+      font-style: italic;
+      font-size: 14.5px;
+      line-height: 1.65;
+      color: #4B5563;
+      border-left: 2.5px solid var(--msv-blue);
+      padding-left: 16px;
+      margin: 0;
+    }
+
+    /* ─── System pills ───────────────────────────────── */
+    #pills-section {
+      flex-shrink: 0;
+      padding: 34px 40px 38px;
+      min-width: 280px;
+    }
+
+    .pills-label {
+      font-size: 9.5px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+    }
+
+    #pills-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .pill {
+      display: block;
+      width: 100%;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid rgba(0,0,0,0.13);
+      background: transparent;
+      font-family: inherit;
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 150ms, color 150ms, background 150ms;
+      white-space: nowrap;
+    }
+
+    .pill:hover {
+      border-color: var(--msv-blue);
+      color: var(--msv-blue);
+      background: rgba(59,91,213,0.04);
+    }
+
+    .pill.active {
+      border-color: var(--msv-blue);
+      color: var(--msv-blue);
+      background: rgba(59,91,213,0.07);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ Canvas ══════════════════════════════════════════ -->
+<div id="canvas">
+  <div id="frontier-bg"></div>
+
+  <!-- Known world -->
+  <div id="known-world"></div>
+  <span class="zone-label" id="label-known">The known world</span>
+  <span class="zone-label" id="label-frontier">The critical frontier</span>
+  <span class="zone-label" id="label-newworld">New world →</span>
+
+  <!-- ── Builders (dark slate) ── -->
+  <div class="card card-builder" style="left:218px;top:52px" data-char="builder">
+    <div class="card-role">Builder</div>
+    <div class="card-name">Portfolio founder</div>
+  </div>
+
+  <div class="card card-builder" style="left:355px;top:292px" data-char="builder">
+    <div class="card-role">Builder</div>
+    <div class="card-name">Portfolio founder</div>
+  </div>
+
+  <div class="card card-builder" style="left:552px;top:192px" data-char="builder">
+    <div class="card-role">Builder</div>
+    <div class="card-name">Portfolio founder</div>
+  </div>
+
+  <div class="card card-builder" style="left:638px;top:308px" data-char="builder">
+    <div class="card-role">Builder</div>
+    <div class="card-name">Portfolio founder</div>
+  </div>
+
+  <div class="card card-builder" style="left:648px;top:515px" data-char="builder">
+    <div class="card-role">Builder</div>
+    <div class="card-name">Portfolio founder</div>
+  </div>
+
+  <!-- ── Stewards (MSV blue) ── -->
+  <div class="card card-steward" style="left:248px;top:385px" data-char="steward">
+    <div class="card-role">Steward</div>
+    <div class="card-name">LP</div>
+  </div>
+
+  <div class="card card-steward" style="left:374px;top:158px" data-char="steward">
+    <div class="card-role">Steward</div>
+    <div class="card-name">LP</div>
+  </div>
+
+  <div class="card card-steward" style="left:502px;top:420px" data-char="steward">
+    <div class="card-role">Steward</div>
+    <div class="card-name">LP</div>
+  </div>
+
+  <div class="card card-steward" style="left:706px;top:144px" data-char="steward">
+    <div class="card-role">Steward</div>
+    <div class="card-name">LP</div>
+  </div>
+
+  <!-- ── Catalysts (blue, lighter opacity) ── -->
+  <div class="card card-catalyst" style="left:542px;top:44px" data-char="catalyst">
+    <div class="card-role">Catalyst</div>
+    <div class="card-name">Co-investor</div>
+  </div>
+
+  <div class="card card-catalyst" style="left:790px;top:445px" data-char="catalyst">
+    <div class="card-role">Catalyst</div>
+    <div class="card-name">Co-investor</div>
+  </div>
+
+  <!-- ── Navigator (white, info-blue border) ── -->
+  <div class="card card-navigator" style="left:824px;top:238px">
+    <div class="nav-header" id="nav-main" data-char="navigator">
+      <div class="card-role" style="color:var(--info-blue)">Navigator</div>
+      <div class="card-name">MSV</div>
+    </div>
+    <div class="nav-divider"></div>
+    <div class="nav-sub" data-char="investment-team">Leads — Investment Team</div>
+    <div class="nav-sub" data-char="ops-team">Navigation System — Ops Team</div>
+  </div>
+
+  <!-- Navigator arrows — three flat rightward arrows -->
+  <svg id="nav-arrows" style="left:1040px;top:272px;width:98px;height:82px" viewBox="0 0 98 82" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <g opacity="0.35" stroke="#888888" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="0" y1="13" x2="74" y2="13"/>
+      <polyline points="62,6 74,13 62,20"/>
+
+      <line x1="10" y1="41" x2="86" y2="41"/>
+      <polyline points="74,34 86,41 74,48"/>
+
+      <line x1="0" y1="69" x2="74" y2="69"/>
+      <polyline points="62,62 74,69 62,76"/>
+    </g>
+  </svg>
+
+  <!-- ── Undiscovered builders (dashed, clipped at right edge) ── -->
+  <div class="card card-undiscovered" style="left:1148px;top:88px" data-char="undiscovered">
+    <div class="card-role">Undiscovered</div>
+    <div class="card-name">Future builder</div>
+  </div>
+
+  <div class="card card-undiscovered" style="left:1162px;top:443px" data-char="undiscovered">
+    <div class="card-role">Undiscovered</div>
+    <div class="card-name">Future builder</div>
+  </div>
+
+</div><!-- /canvas -->
+
+<!-- ══ Detail Panel ═════════════════════════════════════ -->
+<div id="detail-panel">
+  <div id="detail-content">
+    <p class="detail-default">Select a character or an essential system to explore the Critical Frontier.</p>
+  </div>
+  <div id="pills-section">
+    <div class="pills-label">Essential systems</div>
+    <div id="pills-grid"></div>
+  </div>
+</div>
+
+<script>
+  // ── Data ────────────────────────────────────────────
+  const characters = {
+    navigator: {
+      role: 'Navigator',
+      name: 'At the edge. Leading the way.',
+      body: 'MSV — investment team and ops team together — operates at the frontier edge, ahead of the builders, reading the terrain they\'re about to enter. Not behind. Not beside. Slightly further forward. The navigator has seen what\'s coming. The builder is inside it. That\'s the relationship.',
+      quote: 'We don\'t point at the frontier from a distance. We\'re already in it.'
+    },
+    'investment-team': {
+      role: 'Navigator — Investment team',
+      name: 'Holds the map. Reads the terrain.',
+      body: 'The investment team operates at the furthest point of the frontier — where science is becoming something that can finally be built, and where the decision to back a builder has to be made before the evidence is complete. They see across systems in a way no single founder can. They hold conviction when the room is quiet.',
+      quote: 'We\'ve been looking for you.'
+    },
+    'ops-team': {
+      role: 'Navigator — Navigation system',
+      name: 'The infrastructure of conviction.',
+      body: 'The ops team is what makes operating at the frontier edge sustainable over a long horizon. Conviction without operational discipline is just exposure. The navigation system runs quietly underneath everything — maintaining the relationships, the processes, and the infrastructure that lets the investment team stay focused on what\'s ahead.',
+      quote: 'The frontier doesn\'t run on conviction alone.'
+    },
+    builder: {
+      role: 'Builder — Portfolio founder',
+      name: 'Inside the frontier. Building.',
+      body: 'Portfolio founders are scattered across the frontier at different depths — some closer to known territory, some further out. All of them rebuilding an essential system from the ground up. The navigator found them, recognised the weight of their work, and moved alongside them. The builder makes the frontier real.',
+      quote: 'You didn\'t choose this problem. It chose you.'
+    },
+    steward: {
+      role: 'Steward — LP',
+      name: 'Capital that holds for the long horizon.',
+      body: 'Stewards travel with the frontier — they\'re not anchored in the known world. Their role is to provide the patient capital that makes long-horizon building possible. The right LPs understand that essential systems don\'t mature on a venture timeline. They don\'t ask them to.',
+      quote: 'Backing what endures. Investing beyond cycles.'
+    },
+    catalyst: {
+      role: 'Catalyst — Co-investor',
+      name: 'Accelerates what\'s already in motion.',
+      body: 'Co-investors travel at the frontier too — arriving alongside builders and amplifying what\'s already moving in the right direction. They don\'t originate the conviction. They recognise it and compound it.',
+      quote: 'The best catalysts recognise the frontier before they arrive at it.'
+    },
+    undiscovered: {
+      role: 'Undiscovered builder',
+      name: 'Beyond the current edge.',
+      body: 'The frontier is always expanding. There are builders already working on the next essential system who haven\'t been found yet. They exist beyond what\'s currently visible — further into the frontier than anyone has mapped. Part of the navigator\'s role is to keep moving toward them.',
+      quote: 'When no one claims the territory, the work stays smaller than it deserves to be.'
+    }
+  };
+
+  const systems = [
+    {
+      id: 'energy',
+      label: 'Decarbonise the planet',
+      body: 'From grid-scale renewables to complex energy markets. Australia has pioneered systems designed for reliability, transition, and extreme conditions. Energy is the foundation everything else depends on.'
+    },
+    {
+      id: 'food',
+      label: 'Feed 10 billion people',
+      body: 'Agriculture built for low rainfall, poor soils, and global export. The food system is being rebuilt for biology-led innovation, autonomy, and a climate that no longer behaves the way it used to.'
+    },
+    {
+      id: 'space',
+      label: 'Bridge the gap to space',
+      body: 'Sovereign launch capability, Earth observation, communications, and space safety — tightly linked to terrestrial systems. Space isn\'t separate from the frontier. It\'s where the frontier extends next.'
+    },
+    {
+      id: 'industrial',
+      label: 'Supercharge industrial productivity',
+      body: 'Software tightly integrated with hardware, physics, and operations. The next generation of industrial infrastructure is being built for autonomy, resilience, and a workforce that looks completely different.'
+    },
+    {
+      id: 'health',
+      label: 'Reach humanity scale healthcare',
+      body: 'Biology and health systems built not for the few, but for everyone. Closing the gap between what medicine can do and what actually reaches most people requires rebuilding the system, not improving the edges.'
+    },
+    {
+      id: 'intelligence',
+      label: 'Enable the next intelligence leap',
+      body: 'Compute, AI, and machine perception at the point where they become genuinely useful infrastructure. Not hype cycles — the moment where intelligence becomes a reliable substrate for everything else that needs to be built.'
+    }
+  ];
+
+  // ── Render pills ────────────────────────────────────
+  const pillsGrid = document.getElementById('pills-grid');
+  systems.forEach(sys => {
+    const btn = document.createElement('button');
+    btn.className = 'pill';
+    btn.textContent = sys.label;
+    btn.addEventListener('click', () => showSystem(sys, btn));
+    pillsGrid.appendChild(btn);
+  });
+
+  // ── Render detail content ───────────────────────────
+  function showCharacter(data) {
+    clearPills();
+    document.getElementById('detail-content').innerHTML =
+      `<div class="detail-role">${data.role}</div>` +
+      `<div class="detail-name">${data.name}</div>` +
+      `<div class="detail-body">${data.body}</div>` +
+      (data.quote ? `<blockquote class="detail-quote">${data.quote}</blockquote>` : '');
+  }
+
+  function showSystem(sys, pillEl) {
+    clearPills();
+    pillEl.classList.add('active');
+    document.getElementById('detail-content').innerHTML =
+      `<div class="detail-role">Essential system</div>` +
+      `<div class="detail-name">${sys.label}</div>` +
+      `<div class="detail-body">${sys.body}</div>`;
+  }
+
+  function clearPills() {
+    pillsGrid.querySelectorAll('.pill.active').forEach(p => p.classList.remove('active'));
+  }
+
+  // ── Card event listeners ────────────────────────────
+  document.querySelectorAll('.card[data-char]').forEach(card => {
+    card.addEventListener('click', () => {
+      const data = characters[card.dataset.char];
+      if (data) showCharacter(data);
+    });
+  });
+
+  // Navigator header (top-level click)
+  document.getElementById('nav-main').addEventListener('click', () => {
+    showCharacter(characters.navigator);
+  });
+
+  // Navigator sub-items
+  document.querySelectorAll('.nav-sub[data-char]').forEach(item => {
+    item.addEventListener('click', e => {
+      e.stopPropagation();
+      const data = characters[item.dataset.char];
+      if (data) showCharacter(data);
+    });
+  });
+</script>
+
+</body>
+</html>
